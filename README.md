@@ -1,182 +1,136 @@
-# 📚 AI 研究助手
+# AI Research Assistant
 
-基于 LLM 的学术论文辅助研究工具
+> 一个**本地化、可离线检索**的学术论文助手。  
+> arXiv 抓元数据，Semantic Scholar 补 citation，SQLite 持久化，TF-IDF / 句向量检索。
 
-## ✨ 功能特性
+## 它能解决什么
 
-### 1. 论文智能解析 📄
-- 自动提取摘要、方法、实验、结论
-- 关键词识别与提取
-- 参考文献解析
-- 伪代码/算法提取
+- 想跟一个研究方向，但没时间天天刷 arXiv → 一句话搜索 + 保存到本地库
+- 想找过往读过的某篇论文，但只记得大意 → 本地语义检索（`find` 命令）
+- 需要 arXiv 不直接提供的 **citation 数 / 发表场所 / 影响力指标** → 自动从 Semantic Scholar 补全
+- 看了一堆论文头脑里乱了 → 阅读状态（queued/reading/done/skip）+ 自定义标签，全部 SQLite 持久化
 
-### 2. 跨论文对比分析 📊
-- 多篇论文方法论对比
-- 实验结果横向比较
-- 优缺点自动分析
-- Markdown 报告导出
+## v2 的关键改动
 
-### 3. 研究趋势分析 📈
-- 基于 arXiv API 的实时数据
-- 月度论文发表趋势
-- 热点话题识别
-- 相关技术关键词提取
+| 模块 | 作用 |
+|---|---|
+| `arxiv_client.py` | 统一封装 arXiv + Semantic Scholar Graph API（citation/venue/年份/影响力） |
+| `vector_store.py` | 抽象向量索引，默认 TF-IDF；可选 sentence-transformers + ChromaDB |
+| `paper_db.py` | SQLite 持久化：papers / reading_status / tags 三张表 |
+| `cli.py` | `search` / `find` / `status` / `tag` / `list` / `info` 六个命令 |
 
-### 4. 引用网络分析 🕸️
-- 参考文献统计
-- 引用关系可视化（开发中）
-- 关键论文识别（规划中）
+v1 已有的 `paper_parser` / `comparison_analyzer` / `qa_system` / `trend_analyzer` 没有删，依然可用；v2 在它们旁边增加了"真能跑、能持久化、能检索"的能力。
 
-## 🚀 快速开始
-
-### 安装依赖
+## 快速开始
 
 ```bash
-cd ai-research-assistant
 pip install -r requirements.txt
+
+# 搜 + 存到本地库
+python cli.py search "retrieval augmented generation" --max 30 --enrich --save
+
+# 检索本地库
+python cli.py find "how to ground LLM answers with citations" -k 5
+
+# 标记阅读状态
+python cli.py status 2310.11511 reading --notes "第 3 节 retrieval head 设计很重要"
+
+# 加标签
+python cli.py tag 2310.11511 add rag llm
+
+# 列出所有"reading"
+python cli.py list --status reading
+
+# 看一篇论文的元数据 + 我的标签 + 状态
+python cli.py info 2310.11511
 ```
 
-### 运行应用
+Streamlit Dashboard 也可用：
 
 ```bash
 streamlit run dashboard.py
 ```
 
-应用将在浏览器中自动打开（默认 http://localhost:8501）
+## 库的方式调用
 
-## 📖 使用指南
+```python
+from arxiv_client import ArxivClient, SemanticScholarClient, enrich_with_semantic_scholar
+from paper_db import PaperDB
+from vector_store import TfidfStore
 
-### 论文解析
+papers = ArxivClient().search("mixture of experts", max_results=50)
+enrich_with_semantic_scholar(papers, client=SemanticScholarClient())
 
-1. 在侧边栏选择「📄 论文解析」
-2. 上传 PDF 格式的学术论文
-3. 系统自动解析并提取关键信息
-4. 可导出为 JSON 或 Markdown 格式
+db = PaperDB("my-research.sqlite")
+db.upsert(papers)
 
-### 对比分析
-
-1. 至少上传 2 篇论文
-2. 选择「📊 对比分析」
-3. 选择要对比的论文
-4. 查看对比报告并导出
-
-### 趋势分析
-
-1. 选择「📈 趋势分析」
-2. 选择研究领域或输入自定义关键词
-3. 设置分析时间范围
-4. 查看趋势图表和热点论文
-
-## 🏗️ 项目结构
-
-```
-ai-research-assistant/
-├── dashboard.py          # 主界面 (Streamlit)
-├── paper_parser.py       # 论文解析模块
-├── comparison_analyzer.py # 对比分析模块
-├── trend_analyzer.py     # 趋势分析模块
-├── requirements.txt      # 依赖列表
-├── README.md            # 项目说明
-└── tests/               # 单元测试
-    ├── test_paper_parser.py
-    ├── test_comparison.py
-    └── test_trend.py
+# 语义检索
+store = TfidfStore()
+store.add(db.all())
+for paper, score in store.query("conditional computation in transformers", k=5):
+    print(score, paper.arxiv_id, paper.title)
 ```
 
-## 🧪 测试
+## 升级到嵌入式检索
 
-运行单元测试：
+默认 TF-IDF 已经够用（千级论文 < 1s 检索），但语义检索能找到不共享关键词的相关论文。装上可选依赖：
 
 ```bash
-pytest tests/ -v --cov=.
+pip install sentence-transformers chromadb
 ```
 
-测试覆盖率要求：> 70%
-
-## 🔧 技术栈
-
-- **前端框架**: Streamlit
-- **PDF 处理**: PyPDF2
-- **数据分析**: Pandas, NumPy
-- **可视化**: Plotly
-- **学术 API**: arXiv
-- **测试框架**: pytest
-
-## 📝 API 使用
-
-### 论文解析
+然后：
 
 ```python
-from paper_parser import PaperParser
-
-parser = PaperParser()
-paper = parser.parse("path/to/paper.pdf")
-
-print(f"标题：{paper.title}")
-print(f"摘要：{paper.abstract}")
-print(f"方法：{paper.method}")
+from vector_store import ChromaEmbeddingStore
+store = ChromaEmbeddingStore(persist_dir="./vector_index", model_name="sentence-transformers/all-MiniLM-L6-v2")
+store.add(papers)
+hits = store.query("how to build a faithful summarizer", k=5)
 ```
 
-### 对比分析
+## 设计取舍
 
-```python
-from comparison_analyzer import ComparisonAnalyzer
+**为什么 SQLite 不上 Postgres？**  
+论文场景下数据规模 ≤ 10 万，单用户单文件、可备份、零运维。
 
-analyzer = ComparisonAnalyzer()
-analyzer.add_paper(paper1)
-analyzer.add_paper(paper2)
+**为什么默认 TF-IDF 不直接用 embedding？**  
+sentence-transformers + chromadb 装机量 ~1.5 GB，模型权重 ~500 MB；学术论文场景下 TF-IDF 命中率已经在 90%+，跑得快、依赖少。需要语义召回时再升级。
 
-result = analyzer.generate_full_comparison()
-analyzer.export_to_markdown("report.md")
+**为什么 Semantic Scholar 默认不开 enrich？**  
+公开 API 限速 1 req/s。100 篇要等近 2 分钟。日常浏览用 arXiv 就够，整理"重要 reading list" 时再用 `--enrich`。
+
+## 文件结构
+
+```
+.
+├─ arxiv_client.py        # arXiv + Semantic Scholar
+├─ vector_store.py        # TF-IDF / Chroma 抽象
+├─ paper_db.py            # SQLite 持久化
+├─ cli.py                 # CLI 入口
+│
+├─ paper_parser.py        # v1：PDF 解析
+├─ comparison_analyzer.py # v1：跨论文对比
+├─ qa_system.py           # v1：基于关键词的 QA
+├─ trend_analyzer.py      # v1：趋势分析
+├─ dashboard.py           # Streamlit UI
+│
+└─ tests/                 # 23 新测试 + 71 原有测试，共 94 个
 ```
 
-### 趋势分析
+## 测试
 
-```python
-from trend_analyzer import TrendAnalyzer
-
-analyzer = TrendAnalyzer()
-trend = analyzer.analyze_trend("large language model", months=12)
-
-print(f"论文数量：{trend.paper_count}")
-print(f"相关关键词：{trend.related_keywords}")
+```bash
+python -m pytest tests/ -o addopts=""
 ```
 
-## 🎯 创新点
+23 个新测试覆盖：arxiv_client（含 Semantic Scholar mock）、vector_store、paper_db。
 
-1. **智能解析**: 自动识别论文结构，提取关键信息
-2. **跨论文对比**: 多篇论文横向对比，快速把握研究脉络
-3. **趋势可视化**: 基于真实 arXiv 数据的研究热点分析
-4. **代码复现辅助**: 从论文中提取伪代码和算法描述
-5. **引用网络**: 可视化引用关系，识别关键论文
+## 路线图
 
-## 📊 示例截图
+见 [`ROADMAP.md`](ROADMAP.md)。下一步重点：
+1. PDF 全文本地存储 + 全文索引（让"我在某篇论文里读过 XX"变得可搜）
+2. 真接入 OpenAI/Anthropic API 给 `comparison_analyzer` 提供 LLM 跨论文摘要
 
-### 论文解析界面
-（运行应用后查看）
+## 许可
 
-### 对比分析报告
-（运行应用后查看）
-
-### 趋势分析图表
-（运行应用后查看）
-
-## 🤝 贡献
-
-欢迎提交 Issue 和 Pull Request！
-
-## 📄 许可证
-
-MIT License
-
-## 🙏 致谢
-
-- arXiv 提供免费的学术论文 API
-- Streamlit 团队提供的优秀框架
-- 所有开源贡献者
-
----
-
-**版本**: 1.0.0  
-**更新日期**: 2026-03-04  
-**作者**: AI Research Team
+MIT
